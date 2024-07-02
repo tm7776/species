@@ -1620,7 +1620,7 @@ def create_param_format(param_fmt: Optional[Dict[str, str]]) -> Dict[str, str]:
 
     # Add missing parameter formats
 
-    param_add = ["teff", "disk_teff", "disk_radius"]
+    param_add = ["teff", "disk_teff", "disk_radius"]+[f"disk_teff_{i}" for i in range(100)]+[f"disk_radius_{i}" for i in range(100)]
 
     for param_item in param_add:
         if param_item not in param_fmt:

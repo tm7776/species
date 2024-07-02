@@ -93,6 +93,18 @@ def update_objectbox(
             # Get the spectrum (3 columns)
             spec_tmp = value[0]
 
+            if f"offset_{key}" in model_param:
+                # Offset the flux of the spectrum
+                offset = model_param[f"offset_{key}"]
+
+                print(
+                    f"Offsetting the flux of {key} by: {offset:.2f}...",
+                    end="",
+                    flush=True,
+                )
+                spec_tmp[:, 1] += offset
+                print(" [DONE]")
+
             if f"scaling_{key}" in model_param:
                 # Scale the flux of the spectrum
                 scaling = model_param[f"scaling_{key}"]
@@ -102,7 +114,37 @@ def update_objectbox(
                     end="",
                     flush=True,
                 )
-                spec_tmp[:, 1] *= model_param[f"scaling_{key}"]
+                spec_tmp[:, 1] *= scaling
+                print(" [DONE]")
+
+                # Scale the error of the spectrum
+                print(
+                    f"Scaling the error of {key} by: {scaling:.2f}...",
+                    end="",
+                    flush=True,
+                )
+                spec_tmp[:, 2] *= scaling
+                print(" [DONE]")
+
+            if f"log_scaling_{key}" in model_param:
+                # Scale the flux of the spectrum (logsample)
+                scaling = 10.0 ** model_param[f"log_scaling_{key}"]
+                
+                print(
+                    f"Scaling the flux of {key} by: {scaling:.2f}...",
+                    end="",
+                    flush=True,
+                )
+                spec_tmp[:, 1] *= scaling
+                print(" [DONE]")
+
+                # Scale the error of the spectrum (logsample)
+                print(
+                    f"Scaling the error of {key} by: {scaling:.2f}...",
+                    end="",
+                    flush=True,
+                )
+                spec_tmp[:, 2] *= scaling
                 print(" [DONE]")
 
             if f"error_{key}" in model_param:

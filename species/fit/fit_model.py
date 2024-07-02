@@ -85,6 +85,7 @@ class FitModel:
                         Optional[Tuple[float, float]],
                         Optional[Tuple[float, float]],
                         Optional[Tuple[float, float]],
+                        Optional[Tuple[float, float]],
                     ],
                     List[Tuple[float, float]],
                 ],
@@ -277,31 +278,32 @@ class FitModel:
 
             Calibration parameters:
 
-                 - For each spectrum/instrument, three optional
+                 - For each spectrum/instrument, four optional
                    parameters can be fitted to account for biases in
                    the calibration: a scaling of the flux, a
-                   relative inflation of the uncertainties, and a
-                   radial velocity (RV) shift. The last parameter can
-                   account for an actual RV shift by the source or
-                   an inaccuracy in the wavelength solution.
+                   relative inflation of the uncertainties, a
+                   radial velocity (RV) shift, and an offset of the flux. 
+                   The RV shift parameter can account for an actual RV shift 
+                   by the source or an inaccuracy in the wavelength solution.
 
                  - For example, ``bounds={'SPHERE': ((0.8, 1.2),
-                   (0., 1.), (-50., 50.))}`` if the scaling is
+                   (0., 1.), (-50., 50.), (-3.,-4.))}`` if the scaling is
                    fitted between 0.8 and 1.2, the error is
                    inflated (relative to the sampled model fluxes)
-                   with a value between 0 and 1, and the RV is
-                   fitted between -50 and 50 km/s.
+                   with a value between 0 and 1, the RV is
+                   fitted between -50 and 50 km/s, and the offset is 
+                   fitted between -3 and -4 (in flux units).
 
                  - The dictionary key should be the same as the
                    database tag of the spectrum. For example,
-                   ``{'SPHERE': ((0.8, 1.2), (0., 1.), (-50., 50.))}``
+                   ``{'SPHERE': ((0.8, 1.2), (0., 1.), (-50., 50.), (-3.,-4.))}``
                    if the spectrum is stored as ``'SPHERE'`` with
                    :func:`~species.data.database.Database.add_object`.
 
-                 - Each of the three calibration parameters can be set to
+                 - Each of the fozr calibration parameters can be set to
                    ``None`` in which case the parameter is not used. For
                    example,
-                   ``bounds={'SPHERE': ((0.8, 1.2), None, None)}``.
+                   ``bounds={'SPHERE': ((0.8, 1.2), None, None, None)}``.
 
                  - The errors of the photometric fluxes can be inflated
                    to account for underestimated error bars. The error
@@ -953,6 +955,21 @@ class FitModel:
                 print(" [DONE]")
 
         for item in self.spectrum:
+
+
+            #add parameteres for all individually defined spectrum bounds
+            if bounds is not None:
+                for bound_name in [
+                    f"scaling_{item}", 
+                    f"log_scaling_{item}",
+                    f"error_{item}", 
+                    f"radvel_{item}", 
+                    f"offset_{item}"
+                ]:
+                    if bound_name in bounds or bound_name in normal_prior:
+                        self.modelpar.append(bound_name)
+
+            #add parameteres for all collectively defined spectrum bounds
             if bounds is not None and item in bounds:
                 if bounds[item][0] is not None:
                     # Add the flux scaling parameter
@@ -994,6 +1011,14 @@ class FitModel:
                     self.bounds[f"radvel_{item}"] = (
                         bounds[item][2][0],
                         bounds[item][2][1],
+                    )
+
+                if len(bounds[item]) > 3 and bounds[item][3] is not None:
+                    # Add flux offset parameter
+                    self.modelpar.append(f"offset_{item}")
+                    self.bounds[f"offset_{item}"] = (
+                        bounds[item][3][0],
+                        bounds[item][3][1],
                     )
 
                 if item in self.bounds:
@@ -1284,6 +1309,8 @@ class FitModel:
         # Initilize dictionaries for different parameter types
 
         spec_scaling = {}
+        spec_log_scaling = {}
+        spec_offset = {}
         phot_scaling = {}
         err_scaling = {}
         corr_len = {}
@@ -1298,6 +1325,12 @@ class FitModel:
 
             if item[:8] == "scaling_" and item[8:] in self.spectrum:
                 spec_scaling[item[8:]] = params[self.cube_index[item]]
+            
+            elif item[:12] == "log_scaling_" and item[12:] in self.spectrum:
+                spec_log_scaling[item[12:]] = params[self.cube_index[item]]
+            
+            elif item[:7] == "offset_" and item[7:] in self.spectrum:
+                spec_offset[item[7:]] = params[self.cube_index[item]]
 
             elif item[:6] == "error_" and item[6:] in self.spectrum:
                 err_scaling[item[6:]] = params[self.cube_index[item]]
@@ -1409,6 +1442,12 @@ class FitModel:
 
             if item[:8] == "scaling_" and item[8:] in self.spectrum:
                 spec_scaling[item[8:]] = self.fix_param[item]
+
+            elif item[:12] == "log_scaling_" and item[12:] in self.spectrum:
+                spec_log_scaling[item[12:]] = self.fix_param[item]
+
+            elif item[:7] == "offset_" and item[7:] in self.spectrum:
+                spec_offset[item[7:]] = self.fix_param[item]
 
             elif item[:6] == "error_" and item[6:] in self.spectrum:
                 err_scaling[item[6:]] = self.fix_param[item]
@@ -1532,6 +1571,12 @@ class FitModel:
         for item in self.spectrum:
             if item not in spec_scaling:
                 spec_scaling[item] = 1.0
+
+            if item not in spec_log_scaling:
+                spec_log_scaling[item] = 0.0
+
+            if item not in spec_offset:
+                spec_offset[item] = 0.0
 
             if item not in err_scaling:
                 err_scaling[item] = None
@@ -1983,8 +2028,8 @@ class FitModel:
 
                     model_flux = veil_param["veil_a"] * model_flux + veil_flux
 
-            # Scale the spectrum data
-            data_flux = spec_scaling[item] * self.spectrum[item][0][:, 1]
+            # Scale and offset the spectrum data
+            data_flux = spec_scaling[item] * ( 10.0 ** spec_log_scaling[item] ) * ( self.spectrum[item][0][:, 1] + spec_offset[item] )
 
             # Apply radial velocity shift
 
@@ -2027,8 +2072,9 @@ class FitModel:
                 model_flux = spec_interp(self.spectrum[item][0][:, 0])
 
             if err_scaling[item] is None:
-                # Variance without error inflation
-                data_var = self.spectrum[item][0][:, 2] ** 2
+                # variance without error inflation
+                # but the variance is still scaled by the spectrum scaling
+                data_var = spec_scaling[item] ** 2 * ( 10.0 ** spec_log_scaling[item] ) ** 2 * self.spectrum[item][0][:, 2] ** 2
 
             else:
                 # Variance with error inflation (see Piette & Madhusudhan 2020)

@@ -874,10 +874,19 @@ def plot_spectrum(
                     fwhm_micron = transmission.filter_fwhm()
 
                     if isinstance(box_item.flux[filter_item][0], np.ndarray):
-                        raise NotImplementedError(
-                            "Unit conversion has not yet been implemented! "
-                            "Please open an issue on Github."
+                        no_points = box_item.flux[filter_item].shape[1]
+                        data_in = np.column_stack(
+                            [
+                                [wavel_micron for i in range(no_points)],
+                                [box_item.flux[filter_item][i][0] for i in range(no_points)],
+                                [box_item.flux[filter_item][i][1] for i in range(no_points)],
+                            ]
                         )
+                        data_out = convert_units(data_in, units, convert_from=False)
+
+                        wavelength = data_out[:, 0]
+                        flux_conv = data_out[:, 1]
+                        sigma_conv = data_out[:, 2]
 
                     else:
                         data_in = np.column_stack(
@@ -914,7 +923,7 @@ def plot_spectrum(
                     # Calculate the average, which will be identical
                     # to fwhm_up and fwhm_down when working with
                     # wavelengths but fwhm_up and fwhm_down will
-                    # be different when convertin a FWHM from
+                    # be different when converting a FWHM from
                     # wavelength to frequency
                     fwhm = (fwhm_up + fwhm_down) / 2.0
 
@@ -934,10 +943,10 @@ def plot_spectrum(
                         if isinstance(box_item.flux[filter_item][0], np.ndarray):
                             for i in range(box_item.flux[filter_item].shape[1]):
                                 plot_obj = ax1.errorbar(
-                                    wavelength,
-                                    scale_tmp * box_item.flux[filter_item][0, i],
+                                    wavelength[i],
+                                    scale_tmp * flux_conv[i],
                                     xerr=fwhm / 2.0,
-                                    yerr=scale_tmp * box_item.flux[filter_item][1, i],
+                                    yerr=scale_tmp * sigma_conv[i],
                                     marker="s",
                                     ms=5,
                                     zorder=3,
@@ -1032,6 +1041,13 @@ def plot_spectrum(
                 wavelength = transmission.mean_wavelength()
                 fwhm = transmission.filter_fwhm()
 
+                #convert flux units
+                flux_synphot = box_item.flux[item]
+                data_in = np.column_stack([wavelength, flux_synphot])
+                data_out = convert_units(data_in, units, convert_from=False)
+                wavelength = data_out[:, 0]
+                flux_synphot = data_out[:, 1]
+
                 if quantity == "flux":
                     flux_scaling = wavelength
 
@@ -1043,7 +1059,7 @@ def plot_spectrum(
 
                     ax1.errorbar(
                         wavelength,
-                        flux_scaling * box_item.flux[item] / scaling,
+                        flux_scaling * flux_synphot / scaling,
                         xerr=fwhm / 2.0,
                         yerr=None,
                         **kwargs_copy,
@@ -1056,7 +1072,7 @@ def plot_spectrum(
                 ):
                     ax1.errorbar(
                         wavelength,
-                        flux_scaling * box_item.flux[item] / scaling,
+                        flux_scaling * flux_synphot / scaling,
                         xerr=fwhm / 2.0,
                         yerr=None,
                         alpha=0.7,
@@ -1082,7 +1098,7 @@ def plot_spectrum(
 
                         ax1.errorbar(
                             wavelength,
-                            flux_scaling * box_item.flux[item] / scaling,
+                            flux_scaling * flux_synphot / scaling,
                             xerr=fwhm / 2.0,
                             yerr=None,
                             mfc="white",
@@ -1103,7 +1119,7 @@ def plot_spectrum(
 
                         ax1.errorbar(
                             wavelength,
-                            flux_scaling * box_item.flux[item] / scaling,
+                            flux_scaling * flux_synphot / scaling,
                             xerr=fwhm / 2.0,
                             yerr=None,
                             mfc="white",
