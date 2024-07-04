@@ -2456,6 +2456,84 @@ class Database:
                     print(f"   - {key} = {value:.2f}")
 
         return median_sample
+    
+    def get_median_std_sample(
+        self,
+        tag: str,
+        burnin: Optional[int] = None,
+        verbose: bool = True,
+    ) -> Dict[str, Tuple[float,float]]:
+        """
+        Function for extracting the median parameter values
+        and standard deviations
+        from the posterior samples.
+
+        Parameters
+        ----------
+        tag : str
+            Database tag with the posterior results.
+        burnin : int, None
+            Number of burnin steps to remove. No burnin is
+            removed if the argument is set to ``None``. Is
+            only applied on posterior distributions that
+            have been sampled with ``emcee``.
+        verbose : bool
+            Print output, including the parameter values.
+
+        Returns
+        -------
+        dict
+            Median parameter values 
+            and standard deviations 
+            of the posterior distribution.
+        """
+
+        if verbose:
+            print_section("Get median parameters and standard deviations")
+            print(f"Database tag: {tag}")
+
+        if burnin is None:
+            burnin = 0
+
+        with h5py.File(self.database, "r") as hdf5_file:
+            dset = hdf5_file[f"results/fit/{tag}/samples"]
+
+            if "n_param" in dset.attrs:
+                n_param = dset.attrs["n_param"]
+            elif "nparam" in dset.attrs:
+                n_param = dset.attrs["nparam"]
+
+            samples = np.asarray(dset)
+
+            # samples = samples[samples[:, 2] > 100., ]
+
+            if samples.ndim == 3:
+                if burnin > samples.shape[0]:
+                    raise ValueError(
+                        "The 'burnin' value is larger than the "
+                        f"number of steps ({samples.shape[1]}) "
+                        "that are made by the walkers."
+                    )
+
+                if burnin is not None:
+                    samples = samples[burnin:, :, :]
+
+                samples = np.reshape(samples, (-1, n_param))
+
+            param_sample = {}
+
+            for i in range(n_param):
+                par_key = dset.attrs[f"parameter{i}"]
+                par_mean = np.mean(samples[:, i])
+                par_median = np.median(samples[:, i])
+                par_std = np.std(samples[:, i])
+                param_sample[par_key] = (par_median, par_std)
+
+        if verbose:
+            print("\nParameters:")
+            print(param_sample)
+
+        return param_sample
 
     @typechecked
     def get_compare_sample(self, tag: str, verbose: bool = True) -> Dict[str, float]:
