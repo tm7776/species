@@ -988,7 +988,13 @@ def plot_posterior(
 
     ndim -= len(index_del)
 
-    samples = samples.reshape((-1, ndim))
+    try:
+        samples = samples.reshape((-1, ndim))
+    except:
+        print("I think all parameter values were fixed. Let's skip the posterior plot.")
+        return(plt.figure())
+    else:
+        pass
 
     # Get parameter values of maximum likelihood
 
