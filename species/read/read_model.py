@@ -683,7 +683,7 @@ class ReadModel:
         """
 
         ext_mag = ism_extinction(v_band_ext, v_band_red, wavelengths)
-
+        ext_mag = np.maximum(ext_mag,0.0)
         return flux * 10.0 ** (-0.4 * ext_mag), ext_mag
 
     @typechecked
