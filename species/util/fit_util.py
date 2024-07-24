@@ -471,4 +471,6 @@ def get_residuals(
         photometry=res_phot,
         spectrum=res_spec,
         chi2_red=chi2_red,
+        chi2_stat=chi2_stat,
+        n_dof=n_dof,
     )

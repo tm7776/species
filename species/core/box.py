@@ -343,6 +343,8 @@ class ResidualsBox(Box):
         self.photometry = None
         self.spectrum = None
         self.chi2_red = None
+        self.chi2_stat = None
+        self.n_dof = None
 
 
 class SamplesBox(Box):
@@ -549,6 +551,10 @@ def create_box(boxtype, **kwargs):
         box.spectrum = kwargs["spectrum"]
         if "chi2_red" in kwargs:
             box.chi2_red = kwargs["chi2_red"]
+        if "chi2_stat" in kwargs:
+            box.chi2_stat = kwargs["chi2_stat"]
+        if "n_dof" in kwargs:
+            box.n_dof = kwargs["n_dof"]
 
     elif boxtype == "samples":
         box = SamplesBox()
