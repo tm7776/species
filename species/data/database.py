@@ -3463,6 +3463,39 @@ class Database:
                 ln_evidence = (None, None)
 
         return ln_evidence[0], ln_evidence[1]
+    
+    @typechecked
+    def get_nested_evidence(self, tag: str) -> Tuple[float, float]:
+        """
+        Function for returning the nested sampling log-evidence (i.e.
+        marginalized likelihood) that was computed by
+        the nested sampling algorithm when using
+        :class:`~species.fit.fit_model.FitModel` or
+        :class:`~species.fit.retrieval.AtmosphericRetrieval`.
+
+        Parameters
+        ----------
+        tag: str
+            Database tag with the posterior samples.
+
+        Returns
+        -------
+        float
+            Log-evidence.
+        float
+            Uncertainty on the log-evidence.
+        """
+
+        with h5py.File(self.database, "r") as hdf5_file:
+            dset = hdf5_file[f"results/fit/{tag}/samples"]
+
+            if "nested_ln_evidence" in dset.attrs:
+                nested_ln_evidence = dset.attrs["nested_ln_evidence"]
+            else:
+                # For backward compatibility
+                nested_ln_evidence = (None, None)
+
+        return nested_ln_evidence[0], nested_ln_evidence[1]
 
     @typechecked
     def get_pt_profiles(

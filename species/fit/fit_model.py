@@ -2462,6 +2462,8 @@ class FitModel:
         ln_z = sampling_stats["nested sampling global log-evidence"]
         ln_z_error = sampling_stats["nested sampling global log-evidence error"]
         print(f"\nNested sampling global log-evidence: {ln_z:.2f} +/- {ln_z_error:.2f}")
+        nested_ln_z = ln_z
+        nested_ln_z_error = ln_z_error
 
         # Nested sampling global log-evidence
         ln_z = sampling_stats["nested importance sampling global log-evidence"]
@@ -2513,6 +2515,7 @@ class FitModel:
             "spec_type": "model",
             "spec_name": self.model,
             "ln_evidence": (ln_z, ln_z_error),
+            "nested_ln_evidence": (nested_ln_z, nested_ln_z_error),
             "parallax": self.obj_parallax[0],
         }
 
