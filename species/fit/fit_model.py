@@ -43,6 +43,7 @@ from species.read.read_planck import ReadPlanck
 from species.read.read_filter import ReadFilter
 from species.util.convert_util import logg_to_mass
 from species.util.core_util import print_section
+from species.util.data_util import convert_units
 from species.util.dust_util import (
     convert_to_av,
     interp_lognorm,
@@ -1080,6 +1081,12 @@ class FitModel:
         if "veil_ref" in self.bounds:
             self.modelpar.append("veil_ref")
 
+        if "lin_a" in self.bounds:
+            self.modelpar.append("lin_a")
+        
+        if "lin_b" in self.bounds:
+            self.modelpar.append("lin_b")
+
         # Include prior flux ratio when fitting
 
         self.flux_ratio = {}
@@ -1792,7 +1799,7 @@ class FitModel:
                     phot_flux += flux_offset
 
             # Add blackbody flux from disk components
-
+                       
             if self.n_disk == 1:
                 phot_tmp = self.diskphot[i].spectrum_interp([disk_param["teff"]])[0][0]
 
@@ -1813,6 +1820,24 @@ class FitModel:
                         * (disk_param[f"radius_{disk_idx}"] * constants.R_JUP) ** 2
                         / (1e3 * constants.PARSEC / parallax) ** 2
                     )
+
+            # Add linear term ( y += ax+b in Jansky ) to infrared excess ( >= 4 um )
+
+            if "lin_a" in self.cube_index and "lin_b" in self.cube_index:
+
+                lin_a = params[self.cube_index["lin_a"]]
+                lin_b = params[self.cube_index["lin_b"]]
+
+                read_filt = ReadFilter(phot_filter)
+                wavelengths = read_filt.mean_wavelength()
+                
+                if wavelengths >= 4:
+                    phot_tmp_Jy = lin_a * wavelengths + lin_b
+                    data_in = np.array([[wavelengths, phot_tmp_Jy]])
+                    data_out = convert_units(data_in, ("um","mJy"), convert_from=True) 
+                    phot_tmp = data_out[0][1]
+
+                    phot_flux += phot_tmp
 
             # Apply extinction
 
@@ -2123,6 +2148,23 @@ class FitModel:
 
                     model_flux += model_tmp
 
+            # Add linear term ( y += ax+b in Jansky ) to infrared excess ( >= 4 um )
+
+            if "lin_a" in self.cube_index and "lin_b" in self.cube_index:
+
+                lin_a = params[self.cube_index["lin_a"]]
+                lin_b = params[self.cube_index["lin_b"]]
+
+                wavelengths = self.spectrum[item][0][:, 0]
+
+                model_tmp_Jy = (lin_a * wavelengths + lin_b) * (wavelengths >= 4)
+                data_in = np.column_stack([wavelengths, model_tmp_Jy])
+                data_out = convert_units(data_in, ("um","mJy"), convert_from=True) 
+                model_tmp = data_out[:, 1]  
+
+                model_flux += model_tmp
+
+            
             # Apply extinction
 
             if "lognorm_ext" in dust_param:
@@ -2170,7 +2212,7 @@ class FitModel:
                 )
 
                 model_flux *= 10.0 ** (-0.4 * ext_spec)
-
+            
             # Calculate the likelihood
 
             if self.spectrum[item][2] is not None:

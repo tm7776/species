@@ -30,6 +30,7 @@ from species.phot.syn_phot import SyntheticPhotometry
 from species.read.read_filter import ReadFilter
 from species.read.read_planck import ReadPlanck
 from species.util.convert_util import logg_to_mass
+from species.util.data_util import convert_units
 from species.util.dust_util import check_dust_database, ism_extinction, convert_to_av
 from species.util.model_util import binary_to_single
 from species.util.spec_util import smooth_spectrum
@@ -884,6 +885,18 @@ class ReadModel:
 
         if "flux_offset" in model_param:
             flux += model_param["flux_offset"]
+
+        # Add linear term ( y += ax+b in Jansky ) to infrared excess ( >= 4 um )
+
+        if "lin_a" in model_param and "lin_b" in model_param:
+            wavelengths = self.wl_points
+
+            flux_tmp_mJy = (model_param["lin_a"] * wavelengths + model_param["lin_b"]) * (wavelengths >= 4)
+            data_in = np.column_stack([wavelengths, flux_tmp_mJy])
+            data_out = convert_units(data_in, ("um","mJy"), convert_from=True) 
+            flux_tmp = data_out[:, 1]  
+
+            flux += flux_tmp
 
         # Add blackbody disk component to the spectrum
 
