@@ -1428,14 +1428,14 @@ class FitModel:
             elif "parallax_0" in self.fix_param:
                 parallax_0 = self.fix_param["parallax_0"]
             else:
-                parallax_0 = params[self.cube_index["parallax"]]
+                parallax_0 = None
 
             if "parallax_1" in self.cube_index:
                 parallax_1 = params[self.cube_index["parallax_1"]]
-            elif "parallax_0" in self.fix_param:
+            elif "parallax_1" in self.fix_param:
                 parallax_1 = self.fix_param["parallax_1"]
             else:
-                parallax_1 = params[self.cube_index["parallax"]]
+                parallax_1 = None
 
             if "parallax" in self.cube_index:
                 parallax = params[self.cube_index["parallax"]]
