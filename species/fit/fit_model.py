@@ -32,7 +32,7 @@ except:
 
 from PyAstronomy.pyasl import fastRotBroad
 from schwimmbad import MPIPool
-from scipy import interpolate, stats
+from scipy import interpolate, integrate, stats
 from typeguard import typechecked
 
 from species.core import constants
@@ -1087,6 +1087,15 @@ class FitModel:
         if "lin_b" in self.bounds:
             self.modelpar.append("lin_b")
 
+        if "gtotd_rinn" in self.bounds:
+            self.modelpar.append("gtotd_rinn")
+        
+        if "gtotd_rout" in self.bounds:
+            self.modelpar.append("gtotd_rout")
+
+        if "gtotd_incl" in self.bounds:
+            self.modelpar.append("gtotd_incl")
+
         # Include prior flux ratio when fitting
 
         self.flux_ratio = {}
@@ -1525,6 +1534,9 @@ class FitModel:
                     ):
                         return -np.inf
 
+        # for the gtotd emission, store the radius. Ugly, but it works.
+        radius_copy = param_dict["radius"]
+
         if self.model != "powerlaw":
             if "radius_0" in param_dict and "radius_1" in param_dict:
                 flux_scaling_0 = (param_dict["radius_0"] * constants.R_JUP) ** 2 / (
@@ -1829,15 +1841,34 @@ class FitModel:
                 lin_b = params[self.cube_index["lin_b"]]
 
                 read_filt = ReadFilter(phot_filter)
-                wavelengths = read_filt.mean_wavelength()
+                wavelength = read_filt.mean_wavelength()
                 
-                if wavelengths >= 4:
-                    phot_tmp_Jy = lin_a * wavelengths + lin_b
-                    data_in = np.array([[wavelengths, phot_tmp_Jy]])
+                if wavelength >= 4:
+                    phot_tmp_Jy = lin_a * wavelength + lin_b
+                    data_in = np.array([[wavelength, phot_tmp_Jy]])
                     data_out = convert_units(data_in, ("um","mJy"), convert_from=True) 
                     phot_tmp = data_out[0][1]
 
                     phot_flux += phot_tmp
+
+            # Add gtotd emission
+
+            if "gtotd_rinn" in self.cube_index and "gtotd_rout" in self.cube_index and "gtotd_incl" in self.cube_index:
+
+                gtotd_rinn = params[self.cube_index["gtotd_rinn"]]
+                gtotd_rout = params[self.cube_index["gtotd_rout"]]
+                gtotd_incl = params[self.cube_index["gtotd_incl"]]
+                teff = param_dict["teff"]
+                radius = radius_copy
+
+                if gtotd_rinn > gtotd_rout:
+                    return -np.inf
+                
+                read_filt = ReadFilter(phot_filter)
+                wavelength = read_filt.mean_wavelength()
+
+                phot_tmp = abs(np.cos(gtotd_incl)) * integrate.fixed_quad(gtotd_emission, gtotd_rinn, gtotd_rout, args=(parallax, wavelength, teff, radius))[0]
+                phot_flux += phot_tmp
 
             # Apply extinction
 
@@ -2163,7 +2194,21 @@ class FitModel:
                 model_tmp = data_out[:, 1]  
 
                 model_flux += model_tmp
+            
+            # Add gtotd emission
 
+            if "gtotd_rinn" in self.cube_index and "gtotd_rout" in self.cube_index and "gtotd_incl" in self.cube_index:
+
+                gtotd_rinn = params[self.cube_index["gtotd_rinn"]]
+                gtotd_rout = params[self.cube_index["gtotd_rout"]]
+                gtotd_incl = params[self.cube_index["gtotd_incl"]]
+                teff = param_dict["teff"]
+                radius = radius_copy
+                wavelengths = self.spectrum[item][0][:, 0]
+
+                model_tmp = [abs(np.cos(gtotd_incl)) * integrate.fixed_quad(gtotd_emission, gtotd_rinn, gtotd_rout, args=(parallax, wavelength, teff, radius))[0] for wavelength in wavelengths]
+                model_tmp = np.array(model_tmp)
+                model_flux += model_tmp
             
             # Apply extinction
 
@@ -3171,3 +3216,22 @@ class FitModel:
                 spec_labels=spec_labels,
                 attr_dict=attr_dict,
             )
+            
+def gtotd_emission(gtotd_radius, parallax, wavelength, teff, radius):
+    #function for calculating the emission from a
+    #geometrically thin, optically thick disk at a certain radius
+
+    flux =  (
+        4. * np.pi * constants.PLANCK * constants.LIGHT**2
+        * (gtotd_radius * constants.R_JUP) #unit: m
+        / (1e3 * constants.PARSEC / parallax)**2 #distance squared, unit: m**2
+        / (wavelength * 1e-6)**5 #unit: m**5
+        / ( np.exp(
+                constants.PLANCK * constants.LIGHT
+                / (wavelength * 1e-6) #unit: m
+                / ( constants.BOLTZMANN * teff * (2./3./np.pi)**.25 * (gtotd_radius/radius)**-.75 )
+            ) -1
+        )
+    ) # unit: W m-2 m-1
+    
+    return(flux * 1e-6) #unit: W m-2 um-1

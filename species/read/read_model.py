@@ -13,7 +13,7 @@ import numpy as np
 
 from PyAstronomy.pyasl import rotBroad, fastRotBroad
 from typeguard import typechecked
-from scipy.integrate import simps
+from scipy.integrate import simps, fixed_quad
 from scipy.interpolate import interp1d, RegularGridInterpolator
 
 from species.core import constants
@@ -896,6 +896,23 @@ class ReadModel:
             data_out = convert_units(data_in, ("um","mJy"), convert_from=True) 
             flux_tmp = data_out[:, 1]  
 
+            flux += flux_tmp
+
+        # Add gtotd emission
+
+        if "gtotd_rinn" in model_param and "gtotd_rout" in model_param and "gtotd_incl" in model_param:
+
+            gtotd_rinn = model_param["gtotd_rinn"]
+            gtotd_rout = model_param["gtotd_rout"]
+            gtotd_incl = model_param["gtotd_incl"]
+            teff = model_param["teff"]
+            radius = model_param["radius"]
+            parallax = model_param["parallax"]
+
+            wavelengths = self.wl_points
+
+            flux_tmp = [ abs(np.cos(gtotd_incl)) * fixed_quad(gtotd_emission, gtotd_rinn, gtotd_rout, args=(parallax, wavelength, teff, radius))[0] for wavelength in wavelengths]
+            flux_tmp = np.array(flux_tmp)
             flux += flux_tmp
 
         # Add blackbody disk component to the spectrum
@@ -2222,3 +2239,22 @@ class ReadModel:
             color2=color_2_list,
             sptype=param_list,
         )
+        
+def gtotd_emission(gtotd_radius, parallax, wavelength, teff, radius):
+    #function for calculating the emission from a
+    #geometrically thin, optically thick disk at a certain radius
+
+    flux =  (
+        4. * np.pi * constants.PLANCK * constants.LIGHT**2
+        * (gtotd_radius * constants.R_JUP) #unit: m
+        / (1e3 * constants.PARSEC / parallax)**2 #distance squared, unit: m**2
+        / (wavelength * 1e-6)**5 #unit: m**5
+        / ( np.exp(
+                constants.PLANCK * constants.LIGHT
+                / (wavelength * 1e-6) #unit: m
+                / ( constants.BOLTZMANN * teff * (2./3./np.pi)**.25 * (gtotd_radius/radius)**-.75 )
+            ) -1
+        )
+    ) # unit: W m-2 m-1
+    
+    return(flux * 1e-6) #unit: W m-2 um-1
